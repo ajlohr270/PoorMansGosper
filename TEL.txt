@@ -1,0 +1,222 @@
+
+
+Help:=proc()
+
+if (args=NULL) then
+print(`Functions included are:`):
+print(`PMG(summand,n,maxDeg,lb)`):
+print(`obfuscate(poly,exp,n,offset)`):
+print(`findHyper(L,n,maxDeg)`):
+print(`PMGMB(summand,n,maxDeg,lb`):
+print(`findMB(L,n,maxDeg,ns)`):
+
+elif(args=PMG) then
+print(`summand is the expression in n that you are summing over`):
+print(`n is left as a symbol`):
+print(`maxDeg is the higest degree allowed when looking for a hypergeometric ratio`):
+print(`lb is the n value for the first term in the sum`):
+print(`optional last argument will limit the atoms used in identifying the limit`):
+print(`will ouput the guessed limit, and a hypergeometric term which is what is left after subtracting off the limit`):
+print(`for example try:`):
+print(`PMG(1/(n^4+n^2+1)/n!,n,5,0);`):
+print(`PMG((-1)^n*(n^2+3*n^3+1)/(2*n+1)!,n,10,0);`):
+print(`PMG((n^2+1)/(2*n)!,n,10,0,[1,cosh(1),sinh(1)]);`):
+
+
+elif(args=obfuscate) then
+print(`rat is some rational expression in n`):
+print(`exp is one of: "1/n!","1/(2*n)!","1/(2*n+1)!","(-1)^n/(2*n)!","(-1)^n/(2*n+1)!"`):
+print(`n is left as a symbol`):
+print(`offset is howmuch to shift the summand by. It will add offset*exp to the output`):
+print(`it will output a summand that when unshifted has indefinite sum rat*exp`):
+print(`for example, try running:`):
+print(`obfuscate((1/2)*(n+1)/(n^2+n+1),1/n!,n,1/2);`):
+
+elif(args=findHyper) then
+print(`L is some first few terms of the sequence`):
+print(`n is left as a symbol`):
+print(`maxDeg is the highest degree to allow in the hypergoemetric ratio`):
+print(`For example try:`):
+print(`findHyper([seq((2*n)!/n!,n=0..30)],n,4);`):
+
+elif(args=PMGMB) then
+
+print(`as in PMG, but extra summand which inputs the other expressions in n that can appear in the ratio of consecutive terms`):
+print(`for example, try:`):
+print(`o:=obfuscate((2+n+2^n)/(n^3+1),1/n!,n,1);PMGMB(%,n,5,0,{n,2^n});`):
+print(`you get the correct hypergeometric ratio for the sum`):
+
+elif(args=findMB) then
+print(`tries to find a multibasic representation of the given L`):
+print(`for example, try:`):
+print(`L:=[1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0]:for i from 2 to 20 do L[i] := (i+2^i)/(i-1-3*2^i+i^2)*L[i-1] od:L;`):
+print(`findMB(L,n,2,{n,2^n});`):
+
+fi:
+end:
+
+
+approxLim:=proc(summand,n) local i,top,guess:
+Digits:=10000;
+top:=10:
+guess:=identifyRat(add(subs(n=i,summand),i=1..top),100);
+top:=top*10;
+while(guess<>identifyRat(add(subs(n=i,summand),i=1..top),100)) do
+guess:=identifyRat(add(subs(n=i,summand),i=1..top),100);
+top:=top*10;
+if (top>1000) then
+print(`this is gonna take a long time, limit is probably not rational number`):
+return(FAIL):
+fi:
+od:
+guess;
+end:
+
+identifyRat:=proc(number,threshold) local q,fr,i,intpart,mynum:
+Digits:=10000;
+intpart:=trunc(number):
+mynum:=number-intpart: 
+fr :=convert(mynum,'confrac','q'):
+i:=0:
+while((i<nops(q)) and (fr[i+1]<threshold)) do
+i:=i+1:
+od:
+intpart+q[i]:
+end:
+
+#idenifies rational with score. Higher score means more likely rational
+IRatWScore:=proc(number,threshold) local intpart,q,mynum,i,fr:
+Digits:=10000;
+intpart:=trunc(number):
+mynum:=number-intpart: 
+fr :=convert(mynum,'confrac','q'):
+i:=0:
+while((i<nops(q)) and (fr[i+1]<threshold)) do
+i:=i+1:
+od:
+if i< nops(fr) then
+[intpart+q[i],evalf(fr[i+1]/(3+intpart+i^2*Statistics[Mean](fr[1..i])),10),fr]:
+else
+[intpart+q[i],0,fr]:
+fi
+end:
+
+#Tries to identify the number as a rational times some powers of the numbers in irrats
+#It will output the number and a score that if it's bigger, we are more sure, if smaller, less sure
+IPowWScore:=proc(number,irrats,maxpow,threshold) local i, bestscore,num,score,bestnum,foo,bestfra,fra:
+#print(number,irrats,maxpow);
+if nops(irrats)=0 then
+RETURN(IRatWScore(number,threshold)):
+fi:
+Digits:=10000:
+bestscore :=-1:
+bestnum:=1:
+bestfra:=[]:
+for i from -maxpow to maxpow do
+#foo:=IRatWScore(number/mul(irrats[k]^(i-comps[j][k]),k=1..nops(irrats)),threshold):
+foo :=IPowWScore(number/irrats[1]^i,irrats[2..nops(irrats)],maxpow-abs(i),threshold):
+num:=foo[1]:
+score:=foo[2]:
+fra:=foo[3]:
+if score > bestscore then
+bestscore := score:
+bestnum := num*irrats[1]^i:
+bestfra:=fra:
+fi:
+od:
+[bestnum,bestscore,bestfra]:
+end:
+
+#finds common ratio for given list of numbers suspected to be hypergeometric
+findHyper:=proc(L,n,maxDeg) local deg,eqs,vars,sols,i,j,x,y:
+for deg from 0 to maxDeg do
+	eqs:={seq(add(x[i]*j^i,i=0..deg)*L[j]-add(y[i]*j^i,i=0..deg)*L[j-1],j=2..2+deg*2+2)}:
+	vars:={seq(op({x[i],y[i]}),i=0..deg)}:
+	sols:=solve(eqs,vars):
+#	print(sols,eqs,vars):
+	if((subs(sols,vars)<>{0}) and (sols<>NULL)) then
+	return(simplify(subs(sols,add(y[i]*n^i,i=0..deg)/add(x[i]*n^i,i=0..deg)))):
+	fi:
+od:
+return(FAIL):
+end:
+
+builtInApproxLimit:=proc(summand,n,lb,digits,ub,atoms::list := [1,exp(1),cos(1),sin(1),sinh(1),cosh(1)]) local i:
+identify(evalf(evalf(add(subs(n=i,summand),i=lb..ub),digits),digits/2),BasisPolyConst=[Pi],BasisSumConst=atoms );
+end:
+
+PMG:=proc(summand,n,maxDeg,lb,atoms::list := [1,exp(1),cos(1),sin(1),sinh(1),cosh(1)]) local l,N,NN,L,S,shiftSummand,l2,remainder,i:
+l:=builtInApproxLimit(summand,n,lb,100,200,atoms):
+print(`Limit looks like`):
+print(l):
+l2:=subs({exp(1) = 'sum(1/i!,i=lb..NN)',
+sin(1) = 'sum((-1)^i/(2*i+1)!,i=lb..NN)',
+sinh(1) = 'sum(1/(2*i+1)!,i=lb..NN)',
+cosh(1) = 'sum(1/(2*i)!,i=lb..NN)',
+cos(1) = 'sum((-1)^i/(2*i)!,i=lb..NN)'},l):
+L:=[seq(add(subs(n=i,summand),i=lb..N) - simplify(simplify(subs(NN=N,l2))),N=lb..1+maxDeg*2+4)]:
+L:=simplify(L):
+#print(L):
+remainder := simplify(subs(n=n+1,findHyper(L,n,maxDeg))):
+print( Hyper(factor(simplify(remainder))));
+shiftSummand:=(summand-subs({exp(1) = 1/n!,sin(1) = (-1)^n/(2*n+1)!,cos(1) = (-1)^n/(2*n)!,sinh(1) = 1/(2*n+1)!,cosh(1) = 1/(2*n)!},l)):
+S:= shiftSummand/(remainder-1):
+if(simplify((-S+subs(n=n+1,S))/shiftSummand) <> 1) then
+print(S):
+print(`this should of been 1:`):
+print(simplify((-S+subs(n=n+1,S))/shiftSummand)):
+return(FAIL):
+fi:
+return simplify(subs(n=n+1,S)):
+end:
+
+obfuscate:=proc(poly,exp,n,offset) local expr:
+expr:=simplify(poly*exp - subs(n=n-1,poly*exp)):
+expr:=simplify(expr + offset*exp):
+end:
+
+with(combinat):
+findMB:=proc(L,n,maxDeg,ns) local deg,eqs,vars,sols,comps,comp,d,j,k,x,y:
+
+for deg from 0 to maxDeg do
+
+	comps := {seq(op(composition(d+nops(ns),nops(ns))),d=0..deg)}:
+	if(nops(L)<2+2*nops(comps)+2) then
+	print(`give more terms for the list`):
+	return(FAIL):		
+	fi:
+	eqs:={seq(add(x[comp]*mul(subs(n=j,ns[k])^(comp[k]-1),k=1..nops(ns)),comp in comps)*L[j]-add(y[comp]*mul(subs(n=j,ns[k])^(comp[k]-1),k=1..nops(ns)),comp in comps)*L[j-1],j=2..2+2*nops(comps)+2)}:
+	vars:={seq(op({x[comp],y[comp]}),comp in comps)}:
+	sols:=solve(eqs,vars):
+	print(sols,eqs,vars):
+	if((subs(sols,vars)<>{0}) and (sols<>NULL)) then
+	return(simplify(subs(sols,add(y[comp]*mul(ns[k]^(comp[k]-1),k=1..nops(ns)),comp in comps)/add(x[comp]*mul(ns[k]^(comp[k]-1),k=1..nops(ns)),comp in comps)))):
+	fi:
+od:
+return(FAIL):
+end:
+
+PMGMB:=proc(summand,n,maxDeg,lb,ns,atoms::list := [1,exp(1),cos(1),sin(1),sinh(1),cosh(1)]) local l,N,NN,L,S,shiftSummand,l2,remainder,i:
+l:=builtInApproxLimit(summand,n,lb,60,200,atoms):
+print(`Limit looks like`):
+print(l):
+l2:=subs({exp(1) = 'sum(1/i!,i=lb..NN)',
+sin(1) = 'sum((-1)^i/(2*i+1)!,i=lb..NN)',
+sinh(1) = 'sum(1/(2*i+1)!,i=lb..NN)',
+cosh(1) = 'sum(1/(2*i)!,i=lb..NN)',
+cos(1) = 'sum((-1)^i/(2*i)!,i=lb..NN)'},l):
+L:=[seq(add(subs(n=i,summand),i=lb..N) - simplify(simplify(subs(NN=N,l2))),N=lb..1+maxDeg^(nops(ns))*2+4)]:
+L:=simplify(L):
+#print(L):
+remainder := simplify(subs(n=n+1,findMB(L,n,maxDeg,ns))):
+print( Hyper(factor(simplify(remainder))));
+shiftSummand:=(summand-subs({exp(1) = 1/n!,sin(1) = (-1)^n/(2*n+1)!,cos(1) = (-1)^n/(2*n)!,sinh(1) = 1/(2*n+1)!,cosh(1) = 1/(2*n)!},l)):
+S:= shiftSummand/(remainder-1):
+if(simplify((-S+subs(n=n+1,S))/shiftSummand) <> 1) then
+print(S):
+print(`failed to verify this, but the verification is still buggy`):
+return(FAIL):
+fi:
+return simplify(subs(n=n+1,S)):
+end:
+
